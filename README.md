@@ -3,7 +3,7 @@
 - Native Tensorflow API Implement of RankIQA. 
 
 ```
-├── data -> /home/rjw/desktop/graduation_project/RankIQA/data
+├── data -> /home/**/desktop/RankIQA/data
 ├── demo
 │   ├── img
 │   └── predict.py
