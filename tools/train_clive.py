@@ -43,8 +43,8 @@ def process_command_args():
     ## Path related arguments
     parser.add_argument('--exp_name',type=str,default="finetuneiqa",help='experiment name')
     parser.add_argument('--data_dir',type=str,default=BASE_PATH,help='the root path of dataset')
-    parser.add_argument('--train_list',type=str,default= os.path.abspath('..')+'/data/clive_train.txt',help='train data list for read image.')
-    parser.add_argument('--test_list', type=str, default= os.path.abspath('..')+'/data/clive_test.txt', help='test data list for read image.')
+    parser.add_argument('--train_list',type=str,default= os.path.abspath('..')+'/data/ft_clive_train.txt',help='train data list for read image.')
+    parser.add_argument('--test_list', type=str, default= os.path.abspath('..')+'/data/ft_clive_test.txt', help='test data list for read image.')
     parser.add_argument('--ckpt_dir',type=str,default=os.path.abspath('..')+'/experiments',help='the path of ckpt file')
     parser.add_argument('--logs_dir',type=str,default=os.path.abspath('..')+'/experiments',help='the path of tensorboard logs')
     parser.add_argument('--pretrain_models_path',type=str,default=os.path.abspath('..')+"/experiments/LIVE/rankiqa/"+'model.ckpt-8999')
@@ -208,8 +208,8 @@ def main():
         args.train_list = os.path.abspath('..')+'/data/ft_live_train.txt'
         args.test_list = os.path.abspath('..')+'/data/ft_live_test.txt'
     elif args.dataset == 'CLIVE':
-        args.train_list = os.path.abspath('..') + '/data/clive_train.txt'
-        args.test_list = os.path.abspath('..') + '/data/clive_test.txt'
+        args.train_list = os.path.abspath('..') + '/data/ft_clive_train.txt'
+        args.test_list = os.path.abspath('..') + '/data/ft_clive_test.txt'
     elif args.dataset=='CSIQ':
         args.train_list = 'ft_csiq_train.txt'
         args.test_list = 'ft_csiq_test.txt'
