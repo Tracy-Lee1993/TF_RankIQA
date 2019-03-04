@@ -1,6 +1,31 @@
 # TF_RankIQA
 
-- Tensorflow implement of RankIQA. 
+- Native Tensorflow API Implement of RankIQA. 
+
+```
+├── data -> /home/rjw/desktop/graduation_project/RankIQA/data
+├── demo
+│   ├── img
+│   └── predict.py
+├── experiments
+│   ├── CLIVE
+│   ├── LIVE
+│   ├── tid2013
+│   └── vgg_models
+├── README.md
+├── src
+│   ├── datasets
+│   ├── loss
+│   ├── metrics
+│   ├── net
+│   └── utils
+└── tools
+    ├── evaluate.py
+    ├── train_clive.py
+    ├── train_iqa.py
+    └── train_rank.py
+
+```
 
 ## Get Started
 
