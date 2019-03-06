@@ -115,36 +115,35 @@ def val_generator(val_image_paths, val_scores, batchsize):
                 yield (X_batch, y_batch)
 
 
-root_dir="/home/rjw/desktop/graduation_project/TF_RankIQA"
+root_dir = "/home/rjw/desktop/graduation_project/TF_RankIQA"
 
 import os
-if __name__=="__main__":
 
-    live_train_path=os.path.join(root_dir,"data/ft_live_train.txt")
-    lvie_test_path=os.path.join(root_dir,"data/ft_live_test.txt")
+if __name__ == "__main__":
+
+    live_train_path = os.path.join(root_dir, "data/ft_live_train.txt")
+    lvie_test_path = os.path.join(root_dir, "data/ft_live_test.txt")
 
     train_image_paths = []
     train_scores = []
-    f = open(live_train_path,'r')
+    f = open(live_train_path, 'r')
     for line in f:
         image_path, image_score = line.strip("\n").split()
         train_image_paths.append(image_path)
         train_scores.append(image_score)
     f.close()
 
-    print(type(train_generator(train_image_paths,train_scores))) # <class 'generator'>
+    print(type(train_generator(train_image_paths, train_scores)))  # <class 'generator'>
 
-    train_gen = train_generator(train_image_paths,train_scores)
+    train_gen = train_generator(train_image_paths, train_scores)
 
     # print(next(train_gen))
 
     for i in range(3):
-        batch_train_images,batch_train_scores = next(train_gen)
-        print(batch_train_images.shape,batch_train_scores.shape)
+        batch_train_images, batch_train_scores = next(train_gen)
+        print(batch_train_images.shape, batch_train_scores.shape)
 
-
-    for iter,(images,targets) in enumerate(train_gen):
-        print(iter,images.shape,targets.shape)
-        if iter==3:
+    for iter, (images, targets) in enumerate(train_gen):
+        print(iter, images.shape, targets.shape)
+        if iter == 3:
             break
-

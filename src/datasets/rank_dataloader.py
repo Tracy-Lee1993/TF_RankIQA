@@ -4,13 +4,12 @@
 created rank_dataloader.py by rjw at 19-1-15 in WHU.
 """
 
+import multiprocessing as mtp
+import os.path as osp
+
 # coding: utf-8
 import cv2
-import sys
 import numpy as np
-import multiprocessing as mtp
-import pdb
-import os.path as osp
 
 
 class Dataset():
@@ -134,7 +133,6 @@ def check_params(params):
 
 
 root_dir="/home/rjw/desktop/graduation_project/TF_RankIQA"
-import os
 
 if __name__=="__main__":
     param_str={'root_dir':root_dir,'data_root':'data','split':'live_train','im_shape':[224,224],'batch_size':24}

@@ -5,12 +5,13 @@ created evaluate.py by rjw at 19-1-10 in WHU.
 """
 import argparse
 import os
-import tensorflow as tf
-import numpy as np
 
-from src.utils.logger import setup_logger
-from src.net.model import VggNetModel
+import numpy as np
+import tensorflow as tf
+
 from src.metrics.srocc import evaluate_metric
+from src.net.model import VggNetModel
+from src.utils.logger import setup_logger
 
 BASE_PATH = '/media/rjw/Ran-software/dataset/iqa_dataset'
 

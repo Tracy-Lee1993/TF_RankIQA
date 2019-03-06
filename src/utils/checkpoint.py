@@ -7,6 +7,7 @@ created checkpoint.py by rjw at 19-1-8 in WHU.
 import os
 import tensorflow as tf
 
+
 def save(saver, sess, logdir, step):
     '''Save weights.
 
@@ -21,7 +22,7 @@ def save(saver, sess, logdir, step):
 
     if not os.path.exists(logdir):
         os.makedirs(logdir)
-    saver.save(sess, checkpoint_path, global_step=step,write_meta_graph=False)
+    saver.save(sess, checkpoint_path, global_step=step, write_meta_graph=False)
     print('The checkpoint has been created.')
 
 
@@ -35,12 +36,10 @@ def load(saver, sess, ckpt_path):
     '''
     saver.restore(sess, ckpt_path)
 
-
     print("Restored model parameters from {}".format(ckpt_path))
 
 
-
-def __load__(saver,sess,ckpt_dir):
+def __load__(saver, sess, ckpt_dir):
     import re
     print(" [*] Reading checkpoints...")
     # checkpoint_dir = os.path.join(ckpt_dir, self.model_dir)
