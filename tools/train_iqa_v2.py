@@ -117,6 +117,7 @@ def get_image_list(args):
 
 
 def train(args):
+
     graph = tf.Graph()
     with graph.as_default():
         global_step = tf.train.create_global_step()

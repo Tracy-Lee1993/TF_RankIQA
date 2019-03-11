@@ -12,19 +12,20 @@ from datetime import datetime
 import numpy as np
 import tensorflow as tf
 import sys
+
 curPath = os.path.abspath(os.path.dirname(__file__))
 rootPath = os.path.split(curPath)[0]
 sys.path.append(rootPath)
-print(sys.path)
+# print(sys.path)
 
-from src.datasets.iqa_dataloader import train_generator, val_generator
+from src.datasets.nima_iqa_dataloader import train_generator, val_generator
 from src.loss.EMD_loss import _emd
 from src.metrics.srocc import evaluate_metric,scores_stats
 from src.net.model import VggNetModel
 from src.net.vgg16_model import fully_connection
 from src.utils.checkpoint import save, load, __load__
 from src.utils.logger import setup_logger
-from maxentropy.skmaxent import MinDivergenceModel
+from src.utils.max_entropy import get_max_entropy_distribution
 
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -38,25 +39,6 @@ def str2bool(v):
 experiment_name = os.path.splitext(__file__.split('/')[-1])[0]
 BASE_PATH = '/media/rjw/Ran-software/dataset/iqa_dataset'
 
-# the maximised distribution must satisfy the mean for each sample
-def get_features():
-    def f0(x):
-        return x
-
-    return [f0]
-
-
-def get_max_entropy_distribution(mean):
-    SAMPLESPACE = np.arange(10)
-    features = get_features()
-
-    model = MinDivergenceModel(features, samplespace=SAMPLESPACE, algorithm='CG')
-
-    # set the desired feature expectations and fit the model
-    X = np.array([[mean]])
-    model.fit(X)
-
-    return model.probdist()
 
 # specifying default parameters
 def process_command_args():
@@ -84,7 +66,7 @@ def process_command_args():
                         help="whether to save trained checkpoint file ")
 
     ## dataset related arguments
-    parser.add_argument('--dataset', default='LIVE', type=str, choices=["LIVE", "CSIQ", "tid2013"],
+    parser.add_argument('--dataset', default='tid2013', type=str, choices=["LIVE", "CSIQ", "tid2013"],
                         help='datset choice')
     parser.add_argument('--crop_width', type=int, default=224, help='train patch width')
     parser.add_argument('--crop_height', type=int, default=224, help='train patch height')
@@ -112,31 +94,33 @@ def process_command_args():
 def get_image_list(args):
     train_image_paths = []
     train_scores = []
+    train_mean = []
     f = open(args.train_list, 'r')
     for line in f:
         image_path, image_score,_ = line.strip("\n").split()
         train_image_paths.append(os.path.join(BASE_PATH,args.dataset,image_path))
-
+        train_mean.append(image_score)
         score_10 = get_max_entropy_distribution(float(image_score))
-        train_scores.append(score_10)
+        train_scores.append(score_10.tolist())
     f.close()
     train_image_paths = np.array(train_image_paths)
     train_scores = np.array(train_scores, dtype='float32')
 
     test_image_paths = []
     test_scores = []
+    test_mean = []
     f = open(args.test_list, 'r')
     for line in f:
         image_path, image_score,_ = line.strip("\n").split()
         test_image_paths.append(os.path.join(BASE_PATH,args.dataset,image_path))
-
+        test_mean.append(image_score)
         score_10 = get_max_entropy_distribution(float(image_score))
         test_scores.append(score_10)
     f.close()
     test_image_paths = np.array(test_image_paths)
     test_scores = np.array(test_scores, dtype='float32')
 
-    return train_image_paths, train_scores, test_image_paths, test_scores
+    return train_image_paths, train_scores,train_mean, test_image_paths, test_scores,test_mean
 
 
 def train(args):
@@ -145,17 +129,16 @@ def train(args):
         global_step = tf.train.create_global_step()
 
         # # placeholders for training data
-        imgs = tf.placeholder(tf.float32, [None, args.crop_height, args.crop_width, 3])
-        scores = tf.placeholder(tf.float32, [None])
+        images = tf.placeholder(tf.float32, [None, args.crop_height, args.crop_width, 3])
+        scores = tf.placeholder(tf.float32, [None,10])
         dropout_keep_prob = tf.placeholder(tf.float32, [])
         lr = tf.placeholder(tf.float32, [])
 
         with tf.name_scope("create_models"):
             model = VggNetModel(num_classes=1, dropout_keep_prob=dropout_keep_prob)
-            model.inference(imgs, True)
+            model.inference(images, True)
             x = fully_connection(model.feature, 128, 0.5)
             y_hat = tf.nn.softmax(x)
-            y_hat = tf.reshape(y_hat, [-1, ])
 
         with tf.name_scope("create_loss"):
             emd_loss_out = _emd(y_hat, scores)
@@ -167,6 +150,13 @@ def train(args):
             optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(emd_loss_out, var_list=var_list)
 
         saver = tf.train.Saver(var_list=tf.global_variables(), max_to_keep=10)
+        # 得到该网络中，所有可以加载的参数
+        variables = tf.contrib.framework.get_variables_to_restore()
+        # 删除output层中的参数
+        variables_to_resotre = [v for v in variables if v.name.startswith("conv")]
+        # 构建这部分参数的
+        pre_saver = tf.train.Saver(variables_to_resotre)
+
 
         tf.summary.scalar('learning_rate', lr)
         tf.summary.scalar('reg_loss', emd_loss_out)
@@ -180,10 +170,10 @@ def train(args):
         summary_test = tf.summary.FileWriter(os.path.join(args.logs_dir, 'test/{}-{}'.format(args.exp_name, timestamp)),
                                              filename_suffix=args.exp_name)
 
-        train_image_paths, train_scores, test_image_paths, test_scores = get_image_list(args)
-        train_loader = train_generator(train_image_paths, train_scores)
+        train_image_paths, train_scores, train_mean, test_image_paths, test_scores, test_mean = get_image_list(args)
+        train_loader = train_generator(train_image_paths, train_scores,train_mean)
         train_num_batchs = len(train_image_paths) // args.batch_size + 1
-        test_loader = val_generator(test_image_paths, test_scores, args.batch_size)
+        test_loader = val_generator(test_image_paths, test_scores, test_image_paths)
         test_num_batchs = len(test_image_paths) // args.batch_size + 1
 
     with tf.Session(graph=graph) as sess:
@@ -195,13 +185,13 @@ def train(args):
         if ckpt and ckpt.model_checkpoint_path:
             counter = __load__(saver, sess, args.ckpt_dir)
         else:
-            load(saver, sess, args.pretrain_models_path)
+            load(pre_saver, sess, args.pretrain_models_path)
 
         start_time = time.time()
         start_step = counter  # if counter is not None else 0
 
         base_lr = args.learning_rate
-        for step, (images, targets) in enumerate(train_loader, start_step):
+        for step, (batch_images, batch_targets,batch_mean) in enumerate(train_loader, start_step):
 
             if step <= 500:
                 base_lr = args.start_lr + (args.learning_rate - args.start_lr) * step / float(500)
@@ -213,7 +203,7 @@ def train(args):
             # base_lr=(base_lr-base_lr*0.001)/args.iter_max*(args) # other learning rate modify
 
             loss_, _ = sess.run([emd_loss_out, optimizer],
-                                        feed_dict={imgs: images, scores: targets, lr: base_lr,
+                                        feed_dict={images: batch_images, scores: batch_targets, lr: base_lr,
                                                    dropout_keep_prob: args.dropout_keep_prob})
 
             if (step + 1) % args.summary_step == 0:
@@ -222,7 +212,7 @@ def train(args):
 
                 logger.info("step %d/%d,reg loss is %f, time %f,learning rate: %.8f" % (
                 step, args.iter_max, loss_, (time.time() - start_time), base_lr))
-                summary_str = sess.run(summary_op, feed_dict={imgs: images, scores: targets, lr: base_lr,
+                summary_str = sess.run(summary_op, feed_dict={images: batch_images, scores: batch_targets, lr: base_lr,
                                                               dropout_keep_prob: args.dropout_keep_prob})
                 summary_writer.add_summary(summary_str, step)
                 # summary_writer.flush()
@@ -232,22 +222,22 @@ def train(args):
                     # saver.save(sess, args.checkpoint_dir + 'iteration_' + str(step) + '.ckpt',write_meta_graph=False)
                     save(saver, sess, args.ckpt_dir, step)
                 test_loss = 0
-                scores_set = np.array([])
+                mean_set = np.array([])
                 lables_set = np.array([])
                 # for step, (images, targets) in enumerate(test_loader):
                 for i in range(test_num_batchs):
-                    images, targets = next(test_loader)
+                    batch_images, batch_targets,batch_mean = next(test_loader)
                     loss_, y_hat_,mean_hat_= sess.run([emd_loss_out, y_hat,mean_hat],
-                                                feed_dict={imgs: images, scores: targets, lr: base_lr,
+                                                feed_dict={images: batch_images, scores: batch_targets, lr: base_lr,
                                                            dropout_keep_prob: args.dropout_keep_prob})
                     test_loss += loss_
-                    scores_set = np.append(scores_set, y_hat_)
-                    lables_set = np.append(lables_set, targets)
+                    mean_set = np.append(mean_set, mean_hat_)
+                    lables_set = np.append(lables_set, batch_mean)
                     logger.info('test_loader step/len(test_loader) :{}/{}'.format(i, test_num_batchs))
 
                 # print(type(scores_set), type(lables_set))
-                # logger.info("scores_set:{}, lables_set:{}.".format(scores_set,lables_set.shape))
-                srocc, krocc, plcc, rmse, mse = evaluate_metric(lables_set, scores_set)
+                # logger.info("mean_set:{}, lables_set:{}.".format(mean_set.shape,lables_set.shape))
+                srocc, krocc, plcc, rmse, mse = evaluate_metric(lables_set, mean_set)
                 test_loss /= test_num_batchs
                 logger.info(
                     "SROCC_v: %.3f\t KROCC: %.3f\t PLCC_v: %.3f\t RMSE_v: %.3f\t mse: %.3f\t test loss: %.3f\n" % (

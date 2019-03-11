@@ -125,7 +125,7 @@ def train(args):
     with tf.Session(graph=graph) as sess:
 
         sess.run(tf.global_variables_initializer())
-        # model.load_original_weights(sess,args.vgg_models_path)
+        model.load_original_weights(sess,args.vgg_models_path)
 
         # global_var = tf.global_variables()
         # var_list = sess.run(global_var)
