@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
 """
-created train_iqa by rjw at 19-1-16 in WHU.
+created train_iqa by rjw at 19-03-01 in WHU.
 """
 
 import argparse
@@ -11,6 +11,12 @@ from datetime import datetime
 
 import numpy as np
 import tensorflow as tf
+import sys
+
+curPath = os.path.abspath(os.path.dirname(__file__))
+rootPath = os.path.split(curPath)[0]
+sys.path.append(rootPath)
+print(sys.path)
 
 from src.datasets.iqa_dataloader import train_generator, val_generator
 from src.loss.reg_loss import mes
@@ -41,25 +47,25 @@ def process_command_args():
     parser = argparse.ArgumentParser(description="Tensorflow RankIQA Training")
 
     ## Path related arguments
-    parser.add_argument('--exp_name', type=str, default="finetuneiqa", help='experiment name')
+    parser.add_argument('--exp_name', type=str, default="finetuneiqav2", help='experiment name')
     parser.add_argument('--data_dir', type=str, default=BASE_PATH, help='the root path of dataset')
-    parser.add_argument('--train_list', type=str, default=os.path.abspath('..') + '/data/ft_live_train.txt',
+    parser.add_argument('--train_list', type=str, default=None,
                         help='train data list for read image.')
-    parser.add_argument('--test_list', type=str, default=os.path.abspath('..') + '/data/ft_live_test.txt',
+    parser.add_argument('--test_list', type=str, default=None,
                         help='test data list for read image.')
-    parser.add_argument('--ckpt_dir', type=str, default=os.path.abspath('..') + '/experiments',
+    parser.add_argument('--ckpt_dir', type=str, default=rootPath + '/experiments',
                         help='the path of ckpt file')
-    parser.add_argument('--logs_dir', type=str, default=os.path.abspath('..') + '/experiments',
+    parser.add_argument('--logs_dir', type=str, default=rootPath + '/experiments',
                         help='the path of tensorboard logs')
     parser.add_argument('--pretrain_models_path', type=str,
-                        default=os.path.abspath('..') + "/experiments/LIVE/rankiqa/" + 'model.ckpt-6999_ft')
+                        default=rootPath + "/experiments/LIVE/rankiqa/" + 'model.ckpt-6999_ft')
 
     ## models retated argumentss
     parser.add_argument('--save_ckpt_file', type=str2bool, default=True,
                         help="whether to save trained checkpoint file ")
 
     ## dataset related arguments
-    parser.add_argument('--dataset', default='LIVE', type=str, choices=["LIVE", "CSIQ", "tid2013"],
+    parser.add_argument('--dataset', default='tid2013', type=str, choices=["LIVE", "CSIQ", "tid2013"],
                         help='datset choice')
     parser.add_argument('--crop_width', type=int, default=224, help='train patch width')
     parser.add_argument('--crop_height', type=int, default=224, help='train patch height')
@@ -72,8 +78,8 @@ def process_command_args():
     parser.add_argument('--summary_step', type=int, default=10)
 
     ## optimization related arguments
-    parser.add_argument('--learning_rate', type=float, default=5e-5, help='init learning rate')
-    parser.add_argument('--start_lr', type=float, default=1e-6, help='init learning rate')
+    parser.add_argument('--learning_rate', type=float, default=1e-6, help='init learning rate')
+    parser.add_argument('--start_lr', type=float, default=1e-7, help='init learning rate')
     parser.add_argument('--dropout_keep_prob', type=float, default=0.7, help='keep neural node')
     parser.add_argument('--iter_max', type=int, default=9000, help='the maxinum of iteration')
     parser.add_argument('--epoch', type=int, default=64)
@@ -89,8 +95,8 @@ def get_image_list(args):
     train_scores = []
     f = open(args.train_list, 'r')
     for line in f:
-        image_path, image_score = line.strip("\n").split()
-        train_image_paths.append(image_path)
+        image_path, image_score,_ = line.strip("\n").split()
+        train_image_paths.append(os.path.join(BASE_PATH,args.dataset,image_path))
         train_scores.append(image_score)
     f.close()
     train_image_paths = np.array(train_image_paths)
@@ -100,8 +106,8 @@ def get_image_list(args):
     test_scores = []
     f = open(args.test_list, 'r')
     for line in f:
-        image_path, image_score = line.strip("\n").split()
-        test_image_paths.append(image_path)
+        image_path, image_score,_ = line.strip("\n").split()
+        test_image_paths.append(os.path.join(BASE_PATH,args.dataset,image_path))
         test_scores.append(image_score)
     f.close()
     test_image_paths = np.array(test_image_paths)
@@ -205,7 +211,7 @@ def train(args):
                 # for step, (images, targets) in enumerate(test_loader):
                 for i in range(test_num_batchs):
                     images, targets = next(test_loader)
-                    loss_, y_hat_ = sess.run([reg_loss, y_hat],
+                    loss_, y_hat_= sess.run([reg_loss, y_hat],
                                                 feed_dict={imgs: images, scores: targets, lr: base_lr,
                                                            dropout_keep_prob: args.dropout_keep_prob})
                     test_loss += loss_
@@ -237,14 +243,14 @@ def main():
     args = process_command_args()
 
     if args.dataset == 'tid2013':
-        args.train_list = os.path.abspath('..') + '/data/ft_tid2013_train.txt'
-        args.test_list = os.path.abspath('..') + '/data/ft_tid2013_test.txt'
+        args.train_list = os.path.join(BASE_PATH,args.dataset,"tid2013_train.txt")
+        args.test_list = os.path.join(BASE_PATH,args.dataset,"tid2013_test.txt")
     elif args.dataset == 'LIVE':
-        args.train_list = os.path.abspath('..') + '/data/ft_live_train.txt'
-        args.test_list = os.path.abspath('..') + '/data/ft_live_test.txt'
+        args.train_list = os.path.join(BASE_PATH,args.dataset,"live_train.txt")
+        args.test_list = os.path.join(BASE_PATH,args.dataset,"live_test.txt")
     elif args.dataset == 'CSIQ':
-        args.train_list = 'ft_csiq_train.txt'
-        args.test_list = 'ft_csiq_test.txt'
+        args.train_list = os.path.join(BASE_PATH,args.dataset,"csiq_train.txt")
+        args.test_list = os.path.join(BASE_PATH,args.dataset,"csiq_test.txt")
     else:
         logger.info("datasets is not in LIVE, CSIQ, tid2013")
 
@@ -257,7 +263,7 @@ def main():
         os.makedirs(args.ckpt_dir)
 
     global logger
-    logger = setup_logger("TF_IQA_" + args.dataset + "_training", output_dir, "train_iqa_")
+    logger = setup_logger("TF_IQA_" + args.dataset + "_training", output_dir, "train_iqav2")
     logger.info(args)
 
     train(args)

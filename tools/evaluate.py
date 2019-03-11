@@ -39,7 +39,7 @@ def process_command_args():
     parser.add_argument('--ckpt_dir',type=str,default=os.path.abspath('..')+'/experiments/',help='the path of ckpt file')
 
     ## dataset related arguments
-    parser.add_argument('--dataset', default='LIVE', type=str, choices=["LIVE", "CSIQ", "tid2013", "CLIVE"],
+    parser.add_argument('--dataset', default='tid2013', type=str, choices=["LIVE", "CSIQ", "tid2013", "CLIVE"],
                         help='datset choice')
     parser.add_argument('--crop_width',type=int,default=224,help='train patch width')
     parser.add_argument('--crop_height',type=int,default=224,help='train patch height')

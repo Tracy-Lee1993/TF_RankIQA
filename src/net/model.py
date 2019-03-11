@@ -11,6 +11,7 @@ class VggNetModel(object):
     def __init__(self, num_classes=1000, dropout_keep_prob=0.5):
         self.num_classes = num_classes
         self.dropout_keep_prob = dropout_keep_prob
+        self.feature =None
 
     def inference(self, x, training=False):
         # conv1_1
@@ -131,6 +132,7 @@ class VggNetModel(object):
 
         # pool5
         pool5 = tf.nn.max_pool(conv5_3, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME', name='pool5')
+        self.feature = pool5
 
         # fc6
         with tf.variable_scope('fc6') as scope:

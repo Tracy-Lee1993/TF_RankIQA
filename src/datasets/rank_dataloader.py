@@ -30,7 +30,7 @@ class Dataset():
         self.im_shape = self.param_str['im_shape']
 
         # get list of image indexes.
-        list_file = self.param_str['split'] + '.txt'
+        list_file = self.param_str['split']
         filename = [line.rstrip('\n') for line in open(osp.join(self.root_dir,self.data_root, list_file))]
         self._roidb = []
         self.scores = []

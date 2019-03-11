@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
 """
-created train_iqa by rjw at 19-1-16 in WHU.
+created train_iqa_v3 by rjw at 19-3-10 in WHU.
 """
 
 import argparse
@@ -11,14 +11,20 @@ from datetime import datetime
 
 import numpy as np
 import tensorflow as tf
+import sys
+curPath = os.path.abspath(os.path.dirname(__file__))
+rootPath = os.path.split(curPath)[0]
+sys.path.append(rootPath)
+print(sys.path)
 
 from src.datasets.iqa_dataloader import train_generator, val_generator
-from src.loss.reg_loss import mes
-from src.metrics.srocc import evaluate_metric
+from src.loss.EMD_loss import _emd
+from src.metrics.srocc import evaluate_metric,scores_stats
 from src.net.model import VggNetModel
+from src.net.vgg16_model import fully_connection
 from src.utils.checkpoint import save, load, __load__
 from src.utils.logger import setup_logger
-
+from maxentropy.skmaxent import MinDivergenceModel
 
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -32,6 +38,25 @@ def str2bool(v):
 experiment_name = os.path.splitext(__file__.split('/')[-1])[0]
 BASE_PATH = '/media/rjw/Ran-software/dataset/iqa_dataset'
 
+# the maximised distribution must satisfy the mean for each sample
+def get_features():
+    def f0(x):
+        return x
+
+    return [f0]
+
+
+def get_max_entropy_distribution(mean):
+    SAMPLESPACE = np.arange(10)
+    features = get_features()
+
+    model = MinDivergenceModel(features, samplespace=SAMPLESPACE, algorithm='CG')
+
+    # set the desired feature expectations and fit the model
+    X = np.array([[mean]])
+    model.fit(X)
+
+    return model.probdist()
 
 # specifying default parameters
 def process_command_args():
@@ -41,18 +66,18 @@ def process_command_args():
     parser = argparse.ArgumentParser(description="Tensorflow RankIQA Training")
 
     ## Path related arguments
-    parser.add_argument('--exp_name', type=str, default="finetuneiqa", help='experiment name')
+    parser.add_argument('--exp_name', type=str, default="finetuneiqav3", help='experiment name')
     parser.add_argument('--data_dir', type=str, default=BASE_PATH, help='the root path of dataset')
-    parser.add_argument('--train_list', type=str, default=os.path.abspath('..') + '/data/ft_live_train.txt',
+    parser.add_argument('--train_list', type=str, default=None,
                         help='train data list for read image.')
-    parser.add_argument('--test_list', type=str, default=os.path.abspath('..') + '/data/ft_live_test.txt',
+    parser.add_argument('--test_list', type=str, default=None,
                         help='test data list for read image.')
-    parser.add_argument('--ckpt_dir', type=str, default=os.path.abspath('..') + '/experiments',
+    parser.add_argument('--ckpt_dir', type=str, default=rootPath + '/experiments',
                         help='the path of ckpt file')
-    parser.add_argument('--logs_dir', type=str, default=os.path.abspath('..') + '/experiments',
+    parser.add_argument('--logs_dir', type=str, default=rootPath + '/experiments',
                         help='the path of tensorboard logs')
     parser.add_argument('--pretrain_models_path', type=str,
-                        default=os.path.abspath('..') + "/experiments/LIVE/rankiqa/" + 'model.ckpt-6999_ft')
+                        default=rootPath + "/experiments/LIVE/rankiqa/" + 'model.ckpt-6999_ft')
 
     ## models retated argumentss
     parser.add_argument('--save_ckpt_file', type=str2bool, default=True,
@@ -89,9 +114,11 @@ def get_image_list(args):
     train_scores = []
     f = open(args.train_list, 'r')
     for line in f:
-        image_path, image_score = line.strip("\n").split()
-        train_image_paths.append(image_path)
-        train_scores.append(image_score)
+        image_path, image_score,_ = line.strip("\n").split()
+        train_image_paths.append(os.path.join(BASE_PATH,args.dataset,image_path))
+
+        score_10 = get_max_entropy_distribution(float(image_score))
+        train_scores.append(score_10)
     f.close()
     train_image_paths = np.array(train_image_paths)
     train_scores = np.array(train_scores, dtype='float32')
@@ -100,9 +127,11 @@ def get_image_list(args):
     test_scores = []
     f = open(args.test_list, 'r')
     for line in f:
-        image_path, image_score = line.strip("\n").split()
-        test_image_paths.append(image_path)
-        test_scores.append(image_score)
+        image_path, image_score,_ = line.strip("\n").split()
+        test_image_paths.append(os.path.join(BASE_PATH,args.dataset,image_path))
+
+        score_10 = get_max_entropy_distribution(float(image_score))
+        test_scores.append(score_10)
     f.close()
     test_image_paths = np.array(test_image_paths)
     test_scores = np.array(test_scores, dtype='float32')
@@ -123,21 +152,24 @@ def train(args):
 
         with tf.name_scope("create_models"):
             model = VggNetModel(num_classes=1, dropout_keep_prob=dropout_keep_prob)
-            y_hat = model.inference(imgs, True)
+            model.inference(imgs, True)
+            x = fully_connection(model.feature, 128, 0.5)
+            y_hat = tf.nn.softmax(x)
             y_hat = tf.reshape(y_hat, [-1, ])
 
         with tf.name_scope("create_loss"):
-            reg_loss = mes(y_hat, scores)
+            emd_loss_out = _emd(y_hat, scores)
+            mean_hat = scores_stats(y_hat)
 
         with tf.name_scope("create_optimize"):
             # optimizer = tf.train.GradientDescentOptimizer(learning_rate=lr).minimize(loss) # not converge ??
             var_list = [v for v in tf.trainable_variables()]
-            optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(reg_loss, var_list=var_list)
+            optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(emd_loss_out, var_list=var_list)
 
         saver = tf.train.Saver(var_list=tf.global_variables(), max_to_keep=10)
 
         tf.summary.scalar('learning_rate', lr)
-        tf.summary.scalar('reg_loss', reg_loss)
+        tf.summary.scalar('reg_loss', emd_loss_out)
         # Build the summary Tensor based on the TF collection of Summaries.
         summary_op = tf.summary.merge_all()
 
@@ -180,7 +212,7 @@ def train(args):
                     base_lr = base_lr / 5
             # base_lr=(base_lr-base_lr*0.001)/args.iter_max*(args) # other learning rate modify
 
-            loss_, y_hat_, _ = sess.run([reg_loss, y_hat, optimizer],
+            loss_, _ = sess.run([emd_loss_out, optimizer],
                                         feed_dict={imgs: images, scores: targets, lr: base_lr,
                                                    dropout_keep_prob: args.dropout_keep_prob})
 
@@ -205,7 +237,7 @@ def train(args):
                 # for step, (images, targets) in enumerate(test_loader):
                 for i in range(test_num_batchs):
                     images, targets = next(test_loader)
-                    loss_, y_hat_ = sess.run([reg_loss, y_hat],
+                    loss_, y_hat_,mean_hat_= sess.run([emd_loss_out, y_hat,mean_hat],
                                                 feed_dict={imgs: images, scores: targets, lr: base_lr,
                                                            dropout_keep_prob: args.dropout_keep_prob})
                     test_loss += loss_
@@ -237,14 +269,14 @@ def main():
     args = process_command_args()
 
     if args.dataset == 'tid2013':
-        args.train_list = os.path.abspath('..') + '/data/ft_tid2013_train.txt'
-        args.test_list = os.path.abspath('..') + '/data/ft_tid2013_test.txt'
+        args.train_list = os.path.join(BASE_PATH,args.dataset,"tid2013_train.txt")
+        args.test_list = os.path.join(BASE_PATH,args.dataset,"tid2013_test.txt")
     elif args.dataset == 'LIVE':
-        args.train_list = os.path.abspath('..') + '/data/ft_live_train.txt'
-        args.test_list = os.path.abspath('..') + '/data/ft_live_test.txt'
+        args.train_list = os.path.join(BASE_PATH,args.dataset,"live_train.txt")
+        args.test_list = os.path.join(BASE_PATH,args.dataset,"live_test.txt")
     elif args.dataset == 'CSIQ':
-        args.train_list = 'ft_csiq_train.txt'
-        args.test_list = 'ft_csiq_test.txt'
+        args.train_list = os.path.join(BASE_PATH,args.dataset,"csiq_train.txt")
+        args.test_list = os.path.join(BASE_PATH,args.dataset,"csiq_test.txt")
     else:
         logger.info("datasets is not in LIVE, CSIQ, tid2013")
 
@@ -257,7 +289,7 @@ def main():
         os.makedirs(args.ckpt_dir)
 
     global logger
-    logger = setup_logger("TF_IQA_" + args.dataset + "_training", output_dir, "train_iqa_")
+    logger = setup_logger("TF_IQA_" + args.dataset + "_training", output_dir, "train_iqav3")
     logger.info(args)
 
     train(args)

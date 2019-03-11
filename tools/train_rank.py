@@ -55,7 +55,7 @@ def process_command_args():
                         help="whether to save trained checkpoint file ")
 
     ## dataset related arguments
-    parser.add_argument('--dataset', default='LIVE', type=str, choices=["LIVE", "CSIQ", "tid2013"],
+    parser.add_argument('--dataset', default='tid2013', type=str, choices=["LIVE", "CSIQ", "tid2013"],
                         help='datset choice')
     parser.add_argument('--crop_width', type=int, default=224, help='train patch width')
     parser.add_argument('--crop_height', type=int, default=224, help='train patch height')
@@ -116,10 +116,10 @@ def train(args):
                                              filename_suffix=args.exp_name)
 
         train_data = Dataset(
-            {'root_dir': os.path.abspath('..'), 'data_root': 'data', 'split': 'live_train', 'im_shape': [224, 224],
+            {'root_dir': os.path.abspath('..'), 'data_root': 'data', 'split':  args.train_list, 'im_shape': [224, 224],
              'batch_size': args.batch_size})
         test_data = Dataset(
-            {'root_dir': os.path.abspath('..'), 'data_root': 'data', 'split': 'live_test', 'im_shape': [224, 224],
+            {'root_dir': os.path.abspath('..'), 'data_root': 'data', 'split':  args.test_list, 'im_shape': [224, 224],
              'batch_size': args.batch_size})
 
     with tf.Session(graph=graph) as sess:

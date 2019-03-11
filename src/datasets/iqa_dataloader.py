@@ -116,20 +116,21 @@ def val_generator(val_image_paths, val_scores, batchsize):
 
 
 root_dir = "/home/rjw/desktop/graduation_project/TF_RankIQA"
+BASE_PATH = '/media/rjw/Ran-software/dataset/iqa_dataset'
 
 import os
 
 if __name__ == "__main__":
 
-    live_train_path = os.path.join(root_dir, "data/ft_live_train.txt")
-    lvie_test_path = os.path.join(root_dir, "data/ft_live_test.txt")
+    live_train_path = os.path.join(BASE_PATH, "LIVE/live_train.txt")
+    lvie_test_path = os.path.join(BASE_PATH, "LIVE/live_test.txt")
 
     train_image_paths = []
     train_scores = []
     f = open(live_train_path, 'r')
     for line in f:
-        image_path, image_score = line.strip("\n").split()
-        train_image_paths.append(image_path)
+        image_path, image_score ,_= line.strip("\n").split()
+        train_image_paths.append(os.path.join(BASE_PATH,"LIVE",image_path))
         train_scores.append(image_score)
     f.close()
 
