@@ -6,12 +6,12 @@ created train_iqa_v3 by rjw at 19-3-10 in WHU.
 
 import argparse
 import os
+import sys
 import time
 from datetime import datetime
 
 import numpy as np
 import tensorflow as tf
-import sys
 
 curPath = os.path.abspath(os.path.dirname(__file__))
 rootPath = os.path.split(curPath)[0]
@@ -20,12 +20,13 @@ sys.path.append(rootPath)
 
 from src.datasets.nima_iqa_dataloader import train_generator, val_generator
 from src.loss.EMD_loss import _emd
-from src.metrics.srocc import evaluate_metric,scores_stats
+from src.metrics.srocc import evaluate_metric, scores_stats
 from src.net.model import VggNetModel
 from src.net.vgg16_model import fully_connection
 from src.utils.checkpoint import save, load, __load__
 from src.utils.logger import setup_logger
 from src.utils.max_entropy import get_max_entropy_distribution
+
 
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -97,30 +98,32 @@ def get_image_list(args):
     train_mean = []
     f = open(args.train_list, 'r')
     for line in f:
-        image_path, image_score,_ = line.strip("\n").split()
-        train_image_paths.append(os.path.join(BASE_PATH,args.dataset,image_path))
+        image_path, image_score, _ = line.strip("\n").split()
+        train_image_paths.append(os.path.join(BASE_PATH, args.dataset, image_path))
         train_mean.append(image_score)
         score_10 = get_max_entropy_distribution(float(image_score))
         train_scores.append(score_10.tolist())
     f.close()
     train_image_paths = np.array(train_image_paths)
     train_scores = np.array(train_scores, dtype='float32')
+    train_mean = np.array(train_mean, dtype="float32")
 
     test_image_paths = []
     test_scores = []
     test_mean = []
     f = open(args.test_list, 'r')
     for line in f:
-        image_path, image_score,_ = line.strip("\n").split()
-        test_image_paths.append(os.path.join(BASE_PATH,args.dataset,image_path))
+        image_path, image_score, _ = line.strip("\n").split()
+        test_image_paths.append(os.path.join(BASE_PATH, args.dataset, image_path))
         test_mean.append(image_score)
         score_10 = get_max_entropy_distribution(float(image_score))
         test_scores.append(score_10)
     f.close()
     test_image_paths = np.array(test_image_paths)
     test_scores = np.array(test_scores, dtype='float32')
+    test_mean = np.array(test_mean, dtype="float32")
 
-    return train_image_paths, train_scores,train_mean, test_image_paths, test_scores,test_mean
+    return train_image_paths, train_scores, train_mean, test_image_paths, test_scores, test_mean
 
 
 def train(args):
@@ -130,7 +133,7 @@ def train(args):
 
         # # placeholders for training data
         images = tf.placeholder(tf.float32, [None, args.crop_height, args.crop_width, 3])
-        scores = tf.placeholder(tf.float32, [None,10])
+        scores = tf.placeholder(tf.float32, [None, 10])
         dropout_keep_prob = tf.placeholder(tf.float32, [])
         lr = tf.placeholder(tf.float32, [])
 
@@ -150,13 +153,12 @@ def train(args):
             optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(emd_loss_out, var_list=var_list)
 
         saver = tf.train.Saver(var_list=tf.global_variables(), max_to_keep=10)
-        # 得到该网络中，所有可以加载的参数
+        # 得到该网络中，所有可以加载的参数; 用var_list = tf.contrib.framework.get_variables(scope_name)获取指定scope_name下的变量，
         variables = tf.contrib.framework.get_variables_to_restore()
         # 删除output层中的参数
         variables_to_resotre = [v for v in variables if v.name.startswith("conv")]
         # 构建这部分参数的
         pre_saver = tf.train.Saver(variables_to_resotre)
-
 
         tf.summary.scalar('learning_rate', lr)
         tf.summary.scalar('reg_loss', emd_loss_out)
@@ -171,9 +173,10 @@ def train(args):
                                              filename_suffix=args.exp_name)
 
         train_image_paths, train_scores, train_mean, test_image_paths, test_scores, test_mean = get_image_list(args)
-        train_loader = train_generator(train_image_paths, train_scores,train_mean)
+        train_loader = train_generator(train_image_paths, train_scores, train_mean)
         train_num_batchs = len(train_image_paths) // args.batch_size + 1
-        test_loader = val_generator(test_image_paths, test_scores, test_image_paths)
+
+        test_loader = val_generator(test_image_paths, test_scores, test_mean)
         test_num_batchs = len(test_image_paths) // args.batch_size + 1
 
     with tf.Session(graph=graph) as sess:
@@ -191,7 +194,7 @@ def train(args):
         start_step = counter  # if counter is not None else 0
 
         base_lr = args.learning_rate
-        for step, (batch_images, batch_targets,batch_mean) in enumerate(train_loader, start_step):
+        for step, (batch_images, batch_targets, _) in enumerate(train_loader, start_step):
 
             if step <= 500:
                 base_lr = args.start_lr + (args.learning_rate - args.start_lr) * step / float(500)
@@ -203,15 +206,15 @@ def train(args):
             # base_lr=(base_lr-base_lr*0.001)/args.iter_max*(args) # other learning rate modify
 
             loss_, _ = sess.run([emd_loss_out, optimizer],
-                                        feed_dict={images: batch_images, scores: batch_targets, lr: base_lr,
-                                                   dropout_keep_prob: args.dropout_keep_prob})
+                                feed_dict={images: batch_images, scores: batch_targets, lr: base_lr,
+                                           dropout_keep_prob: args.dropout_keep_prob})
 
             if (step + 1) % args.summary_step == 0:
                 # logger.info("targets labels is : {}".format(targets))
                 # logger.info("predict lables is : {}".format(y_hat_))
 
                 logger.info("step %d/%d,reg loss is %f, time %f,learning rate: %.8f" % (
-                step, args.iter_max, loss_, (time.time() - start_time), base_lr))
+                    step, args.iter_max, loss_, (time.time() - start_time), base_lr))
                 summary_str = sess.run(summary_op, feed_dict={images: batch_images, scores: batch_targets, lr: base_lr,
                                                               dropout_keep_prob: args.dropout_keep_prob})
                 summary_writer.add_summary(summary_str, step)
@@ -226,17 +229,18 @@ def train(args):
                 lables_set = np.array([])
                 # for step, (images, targets) in enumerate(test_loader):
                 for i in range(test_num_batchs):
-                    batch_images, batch_targets,batch_mean = next(test_loader)
-                    loss_, y_hat_,mean_hat_= sess.run([emd_loss_out, y_hat,mean_hat],
-                                                feed_dict={images: batch_images, scores: batch_targets, lr: base_lr,
-                                                           dropout_keep_prob: args.dropout_keep_prob})
+                    batch_images, batch_targets, batch_mean = next(test_loader)
+                    loss_, y_hat_, mean_hat_ = sess.run([emd_loss_out, y_hat, mean_hat],
+                                                        feed_dict={images: batch_images, scores: batch_targets,
+                                                                   lr: base_lr,
+                                                                   dropout_keep_prob: args.dropout_keep_prob})
                     test_loss += loss_
                     mean_set = np.append(mean_set, mean_hat_)
                     lables_set = np.append(lables_set, batch_mean)
                     logger.info('test_loader step/len(test_loader) :{}/{}'.format(i, test_num_batchs))
 
-                # print(type(scores_set), type(lables_set))
-                # logger.info("mean_set:{}, lables_set:{}.".format(mean_set.shape,lables_set.shape))
+                print(type(mean_set), type(lables_set))
+                logger.info("mean_set:{}, lables_set:{}.".format(mean_set.shape, lables_set.shape))
                 srocc, krocc, plcc, rmse, mse = evaluate_metric(lables_set, mean_set)
                 test_loss /= test_num_batchs
                 logger.info(
@@ -259,14 +263,14 @@ def main():
     args = process_command_args()
 
     if args.dataset == 'tid2013':
-        args.train_list = os.path.join(BASE_PATH,args.dataset,"tid2013_train.txt")
-        args.test_list = os.path.join(BASE_PATH,args.dataset,"tid2013_test.txt")
+        args.train_list = os.path.join(BASE_PATH, args.dataset, "tid2013_train.txt")
+        args.test_list = os.path.join(BASE_PATH, args.dataset, "tid2013_test.txt")
     elif args.dataset == 'LIVE':
-        args.train_list = os.path.join(BASE_PATH,args.dataset,"live_train.txt")
-        args.test_list = os.path.join(BASE_PATH,args.dataset,"live_test.txt")
+        args.train_list = os.path.join(BASE_PATH, args.dataset, "live_train.txt")
+        args.test_list = os.path.join(BASE_PATH, args.dataset, "live_test.txt")
     elif args.dataset == 'CSIQ':
-        args.train_list = os.path.join(BASE_PATH,args.dataset,"csiq_train.txt")
-        args.test_list = os.path.join(BASE_PATH,args.dataset,"csiq_test.txt")
+        args.train_list = os.path.join(BASE_PATH, args.dataset, "csiq_train.txt")
+        args.test_list = os.path.join(BASE_PATH, args.dataset, "csiq_test.txt")
     else:
         logger.info("datasets is not in LIVE, CSIQ, tid2013")
 

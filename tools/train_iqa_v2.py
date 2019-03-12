@@ -78,8 +78,8 @@ def process_command_args():
     parser.add_argument('--summary_step', type=int, default=10)
 
     ## optimization related arguments
-    parser.add_argument('--learning_rate', type=float, default=1e-6, help='init learning rate')
-    parser.add_argument('--start_lr', type=float, default=1e-7, help='init learning rate')
+    parser.add_argument('--learning_rate', type=float, default=5e-4, help='init learning rate')
+    parser.add_argument('--start_lr', type=float, default=1e-6, help='init learning rate')
     parser.add_argument('--dropout_keep_prob', type=float, default=0.7, help='keep neural node')
     parser.add_argument('--iter_max', type=int, default=9000, help='the maxinum of iteration')
     parser.add_argument('--epoch', type=int, default=64)
